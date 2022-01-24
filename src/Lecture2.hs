@@ -1,3 +1,6 @@
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE EmptyDataDecls #-}
+
 {- |
 Module                  : Lecture2
 Copyright               : (c) 2021-2022 Haskell Beginners 2022 Course
@@ -40,6 +43,8 @@ module Lecture2
     , constantFolding
     ) where
 
+import Data.Char (isSpace)
+
 {- | Implement a function that finds a product of all the numbers in
 the list. But implement a lazier version of this function: if you see
 zero, you can stop calculating product and return 0 immediately.
@@ -48,7 +53,9 @@ zero, you can stop calculating product and return 0 immediately.
 84
 -}
 lazyProduct :: [Int] -> Int
-lazyProduct = error "TODO"
+lazyProduct (0:_) = 0
+lazyProduct (x:xs) = x * lazyProduct xs
+lazyProduct [] = 1
 
 {- | Implement a function that duplicates every element in the list.
 
@@ -58,7 +65,8 @@ lazyProduct = error "TODO"
 "ccaabb"
 -}
 duplicate :: [a] -> [a]
-duplicate = error "TODO"
+duplicate (x:xs) = x : x : duplicate xs
+duplicate [] = []
 
 {- | Implement function that takes index and a list and removes the
 element at the given position. Additionally, this function should also
@@ -70,7 +78,12 @@ return the removed element.
 >>> removeAt 10 [1 .. 5]
 (Nothing,[1,2,3,4,5])
 -}
-removeAt = error "TODO"
+removeAt :: Int -> [a] -> (Maybe a, [a])
+removeAt 0 (x:xs) = (Just x, xs)
+removeAt n (x:xs) = let
+  (maybeRes, remaining) = removeAt (n - 1) xs
+  in (maybeRes, x : remaining)
+removeAt _ [] = (Nothing, [])
 
 {- | Write a function that takes a list of lists and returns only
 lists of even lengths.
@@ -81,7 +94,10 @@ lists of even lengths.
 ♫ NOTE: Use eta-reduction and function composition (the dot (.) operator)
   in this function.
 -}
-evenLists = error "TODO"
+evenLists :: [[a]] -> [[a]]
+evenLists = let
+  isEvenList = even . length
+  in foldr (\x acc -> if isEvenList x then x : acc else acc) []
 
 {- | The @dropSpaces@ function takes a string containing a single word
 or number surrounded by spaces and removes all leading and trailing
@@ -97,7 +113,10 @@ spaces.
 
 🕯 HINT: look into Data.Char and Prelude modules for functions you may use.
 -}
-dropSpaces = error "TODO"
+dropSpaces :: String -> String
+dropSpaces = let
+  f = reverse . dropWhile isSpace
+  in f . f
 
 {- |
 
@@ -157,7 +176,90 @@ data Knight = Knight
     , knightEndurance :: Int
     }
 
-dragonFight = error "TODO"
+newtype Experience = Experience Int
+
+data Treasure
+
+data Chest = Chest
+    { chestGold     :: Int
+    , chestTreasure :: Maybe Treasure 
+    }
+
+data DragonColor
+    = Red
+    | Black
+    | Green
+    deriving (Show, Eq)
+
+data Dragon = Dragon
+    { dragonColor            :: DragonColor
+    , dragonHealth           :: Int
+    , dragonFirePower        :: Int
+    , dragonChest            :: Chest
+    }
+
+data FightResult
+  = DragonWon
+    { turn   :: Int
+    , knight :: Knight
+    , dragon :: Dragon
+    }
+  | KnightWon
+    { turn       :: Int
+    , knight     :: Knight
+    , dragon     :: Dragon
+    , experience :: Experience
+    , chest      :: Chest
+    }
+  | KnightEscaped
+    { turn   :: Int
+    , knight :: Knight
+    , dragon :: Dragon
+    }
+
+{- The fight is played in turns.
+The knight starts by striking the dragon at most 10 times.
+If the knight is not tired and the dragon is still alive, the dragon strikes back at the 11th turn.
+Then, if the knight is still alive, they can strike again at most 10 times at the 12th turn, and so on.
+Since the fight is strictly sequential, there cannot be ties (where both the knight and the player die).
+
+The fight has several possible outcomes:
+- @DragonWon@: the knight has been slain by the dragon.
+- @KnightWon@: the dragon has been slain by the knight.
+- @KnightEscaped@: the knight has run away because they were too exhausted.
+-}
+dragonFight :: Knight -> Dragon -> FightResult
+dragonFight = dragonFight' 0
+
+dragonFight' :: Int -> Knight -> Dragon -> FightResult
+dragonFight' turn knight@Knight { knightHealth = 0 } dragon = DragonWon { turn, knight, dragon }
+dragonFight' turn knight@Knight { knightEndurance = 0 } dragon = KnightEscaped { turn, knight, dragon }
+dragonFight' turn knight dragon@Dragon { dragonHealth = 0 } = let
+  Dragon { dragonColor, dragonChest } = dragon
+  Chest { chestGold } = dragonChest
+  experience = case dragonColor of
+    Red -> Experience 100
+    Black -> Experience 150
+    Green -> Experience 250
+  chest = case dragonColor of
+    Green -> Chest { chestGold, chestTreasure = Nothing } -- the stomach of green dragons melts the treasure
+    _     -> dragonChest
+  in KnightWon { turn, knight, dragon, experience, chest }
+dragonFight' turn knight dragon
+    | turn `mod` 11 == 0 = let
+      -- the dragon strikes back, inflicting a @dragonFirePower@ damage to the knight
+      Knight { knightHealth } = knight
+      Dragon { dragonFirePower } = dragon
+      knight' = knight { knightHealth = max 0 (knightHealth - dragonFirePower) }
+      in dragonFight' (turn + 1) knight' dragon
+    | otherwise = let
+      -- the knight strikes at most 10 times, inflicting a @knightAttack@ damage to the dragon,
+      -- and decreasing the knight's @knightEndurance@ by one
+      Dragon { dragonHealth } = dragon
+      Knight { knightAttack, knightEndurance } = knight
+      dragon' = dragon { dragonHealth = max 0 (dragonHealth - knightAttack) }
+      knight' = knight { knightEndurance = knightEndurance - 1 }
+      in dragonFight' (turn + 1) knight' dragon'
 
 ----------------------------------------------------------------------------
 -- Challenges
@@ -178,7 +280,9 @@ False
 True
 -}
 isIncreasing :: [Int] -> Bool
-isIncreasing = error "TODO"
+isIncreasing (x:y:xs) = (x < y) && isIncreasing (y:xs)
+isIncreasing [_] = True
+isIncreasing [] = True
 
 {- | Implement a function that takes two lists, sorted in the
 increasing order, and merges them into new list, also sorted in the
@@ -191,7 +295,9 @@ verify that.
 [1,2,3,4,7]
 -}
 merge :: [Int] -> [Int] -> [Int]
-merge = error "TODO"
+merge (x:xs) (y:ys) = if x <= y then x : merge xs (y:ys) else y : merge (x:xs) ys
+merge [] ys = ys
+merge xs [] = xs
 
 {- | Implement the "Merge Sort" algorithm in Haskell. The @mergeSort@
 function takes a list of numbers and returns a new list containing the
@@ -208,7 +314,15 @@ The algorithm of merge sort is the following:
 [1,2,3]
 -}
 mergeSort :: [Int] -> [Int]
-mergeSort = error "TODO"
+mergeSort xs@(_:_:_) = let
+  n = length xs
+  mid = n `div` 2
+  (left, right) = splitAt mid xs
+  left' = mergeSort left
+  right' = mergeSort right
+  in merge left' right'
+mergeSort [x] = [x]
+mergeSort [] = []
 
 
 {- | Haskell is famous for being a superb language for implementing
@@ -253,7 +367,7 @@ Normally, this would be a sum type with several constructors
 describing all possible errors. But we have only one error in our
 evaluation process.
 -}
-data EvalError
+newtype EvalError
     = VariableNotFound String
     deriving (Show, Eq)
 
@@ -261,7 +375,19 @@ data EvalError
 It returns either a successful evaluation result or an error.
 -}
 eval :: Variables -> Expr -> Either EvalError Int
-eval = error "TODO"
+eval _ (Lit n) = Right n
+eval vars (Var name) = let
+  maybeLit = lookup name vars
+  in case maybeLit of
+    Just lit -> Right lit
+    Nothing  -> Left (VariableNotFound name)
+eval vars (Add e1 e2) = let
+  e1' = eval vars e1
+  e2' = eval vars e2
+  in case (e1', e2') of
+    (Right n1, Right n2) -> Right (n1 + n2)
+    (Left err1, _) -> Left err1
+    (_, Left err2) -> Left err2
 
 {- | Compilers also perform optimizations! One of the most common
 optimizations is "Constant Folding". It performs arithmetic operations
@@ -285,4 +411,13 @@ Write a function that takes and expression and performs "Constant
 Folding" optimization on the given expression.
 -}
 constantFolding :: Expr -> Expr
-constantFolding = error "TODO"
+constantFolding e@(Lit _)   = e
+constantFolding e@(Var _)   = e
+constantFolding (Add e1 e2) = let
+  e1' = constantFolding e1
+  e2' = constantFolding e2
+  in case (e1', e2') of
+    (Lit 0, _) -> constantFolding e2'
+    (_, Lit 0) -> constantFolding e1'
+    (Lit n1, Lit n2) -> constantFolding $ Lit (n1 + n2)
+    (_, _) -> Add (constantFolding e1') (constantFolding e2')
